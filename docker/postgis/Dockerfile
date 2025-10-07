@@ -1,4 +1,4 @@
-ARG BASE_POSTGIS_VER=14-3.2
+ARG BASE_POSTGIS_VER=14-3.3
 FROM postgis/postgis:$BASE_POSTGIS_VER
 
 LABEL maintainer="Yuri Astrakhan <YuriAstrakhan@gmail.com>"
@@ -15,7 +15,7 @@ ARG UTF8PROC_TAG=v2.5.0
 ARG UTF8PROC_REPO=https://github.com/JuliaLang/utf8proc.git
 
 # osml10n - https://github.com/openmaptiles/mapnik-german-l10n/releases
-ARG MAPNIK_GERMAN_L10N_TAG=v2.5.9.1
+ARG MAPNIK_GERMAN_L10N_TAG=v2.5.9.3
 ARG MAPNIK_GERMAN_L10N_REPO=https://github.com/openmaptiles/mapnik-german-l10n.git
 
 
@@ -50,6 +50,8 @@ RUN set -eux  ;\
     cd /opt/  ;\
     git clone --quiet --depth 1 -b $PGSQL_GZIP_TAG $PGSQL_GZIP_REPO  ;\
     cd pgsql-gzip  ;\
+    ln -s /usr/bin/clang-13 /usr/bin/clang-11  ;\
+    ln -s /usr/lib/llvm-13 /usr/lib/llvm-11  ;\
     make  ;\
     make install  ;\
     rm -rf /opt/pgsql-gzip  ;\
