@@ -1,18 +1,9 @@
-import warnings
-from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Union, Dict
 from unittest import main, TestCase
+from tests.python.test_helpers import Case, parsed_data
 
-from openmaptiles.sql import collect_sql, sql_assert_table, sql_assert_func
-from openmaptiles.tileset import ParsedData, Tileset
-
-
-@dataclass
-class Case:
-    id: str
-    query: str
-    reqs: Union[str, List[str], Dict[str, Union[str, List[str]]]] = None
+from openmaptiles.tileset import Tileset
+from openmaptiles.sql import collect_sql, sql_assert_table, sql_assert_func, to_sql
 
 
 def expected_sql(case: Case):
@@ -32,34 +23,6 @@ def expected_sql(case: Case):
 DO $$ BEGIN RAISE NOTICE 'Finished layer {case.id}'; END$$;
 """
     return result
-
-
-def parsed_data(layers: Union[Case, List[Case]]):
-    return ParsedData(dict(
-        tileset=(dict(
-            attribution='test_attribution',
-            bounds='test_bounds',
-            center='test_center',
-            defaults=dict(srs='test_srs', datasource=dict(srid='test_datasource')),
-            id='id1',
-            layers=[
-                ParsedData(dict(
-                    layer=dict(
-                        buffer_size='test_buffer_size',
-                        datasource=dict(query='test_query'),
-                        id=v.id,
-                        fields={},
-                        requires=[v.reqs] if isinstance(v.reqs, str) else v.reqs or []
-                    ),
-                    schema=[ParsedData(v.query, Path(v.id + '_s.yaml'))] if v.query else [],
-                ), Path(f'./{v.id}.yaml')) for v in ([layers] if isinstance(layers, Case) else layers)
-            ],
-            maxzoom='test_maxzoom',
-            minzoom='test_minzoom',
-            name='test_name',
-            pixel_scale='test_pixel_scale',
-            version='test_version',
-        ))), Path('./tileset.yaml'))
 
 
 class SqlTestCase(TestCase):
@@ -137,49 +100,16 @@ $$ LANGUAGE SQL IMMUTABLE;
         self._test('a19', [c13], dict(c13=[c13]))
         self._test('a20', [c14], dict(c14=[c14]))
 
-    def _ts_parse(self, reqs, expected_layers, expected_tables, expected_funcs, extra_cases=None):
-        cases = [] if not extra_cases else list(extra_cases)
-        cases.append(Case('my_id', 'my_query;', reqs=reqs))
-        ts = Tileset(parsed_data(cases))
-        self.assertEqual(ts.attribution, 'test_attribution')
-        self.assertEqual(ts.bounds, 'test_bounds')
-        self.assertEqual(ts.center, 'test_center')
-        self.assertEqual(ts.defaults, dict(srs='test_srs', datasource=dict(srid='test_datasource')))
-        self.assertEqual(ts.id, 'id1')
-        self.assertEqual(ts.maxzoom, 'test_maxzoom')
-        self.assertEqual(ts.minzoom, 'test_minzoom')
-        self.assertEqual(ts.name, 'test_name')
-        self.assertEqual(ts.pixel_scale, 'test_pixel_scale')
-        self.assertEqual(ts.version, 'test_version')
-
-        self.assertEqual(len(ts.layers), len(cases))
+    def test_var_substitution(self):
+        variables = dict(vars=dict(var_substitution_1=14, var_substitution_2='az'))
+        data = parsed_data(Case('my_id', ''))
+        data.data['tileset']['layers'][0]['file'].data['layer'].update(variables)
+        ts = Tileset(data)
         layer = ts.layers_by_id['my_id']
-        self.assertEqual(layer.id, 'my_id')
-        self.assertEqual(layer.requires_layers, expected_layers)
-        self.assertEqual(layer.requires_tables, expected_tables)
-        self.assertEqual(layer.requires_functions, expected_funcs)
 
-        # This test can be deleted once we remove the deprecated property in some future version
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=DeprecationWarning)
-            self.assertEqual(layer.requires, expected_layers)
-
-    def test_ts_parse(self):
-        extra = [Case('c1', 'SELECT 1;')]
-
-        self._ts_parse(None, [], [], [])
-        self._ts_parse([], [], [], [])
-        self._ts_parse({}, [], [], [])
-        self._ts_parse('c1', ['c1'], [], [], extra)
-        self._ts_parse(['c1'], ['c1'], [], [], extra)
-        self._ts_parse(dict(layers='c1'), ['c1'], [], [], extra)
-        self._ts_parse(dict(layers=['c1']), ['c1'], [], [], extra)
-        self._ts_parse(dict(tables='a'), [], ['a'], [])
-        self._ts_parse(dict(tables=['a', 'b']), [], ['a', 'b'], [])
-        self._ts_parse(dict(functions='x'), [], [], ['x'])
-        self._ts_parse(dict(functions=['x', 'y']), [], [], ['x', 'y'])
-        self._ts_parse(dict(layers=['c1'], tables=['a', 'b'], functions=['x', 'y']),
-                       ['c1'], ['a', 'b'], ['x', 'y'], extra)
+        self.assertEqual(to_sql('SELECT * from test where zoom > %%VAR:var_substitution_1%%', layer, False), 'SELECT * from test where zoom > 14')
+        self.assertEqual(to_sql("SELECT * from test where zoom > '%%VAR:var_substitution_2%%'", layer, False), "SELECT * from test where zoom > 'az'")
+        self.assertRaises(ValueError, to_sql, 'SELECT * from test where zoom > %%VAR:var_substitution_3%%', layer, False)
 
 
 if __name__ == '__main__':
