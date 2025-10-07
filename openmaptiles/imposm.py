@@ -1,6 +1,8 @@
 import re
 from .tileset import Tileset
 
+re_zoom_level = re.compile("^.*_z(\d+)$")
+
 
 def zres(pixel_scale, zoom):
     # See https://github.com/openmaptiles/postgis-vt-util/blob/master/src/ZRes.sql
@@ -10,6 +12,13 @@ def zres(pixel_scale, zoom):
 def call_zres(pixel_scale, match):
     # See https://github.com/openmaptiles/postgis-vt-util/blob/master/src/ZRes.sql
     return str(zres(pixel_scale, match.group(0)[4:6]))
+
+
+def get_zoom_level(table_name):
+    m = re_zoom_level.match(table_name)
+    if m is not None:
+        return int(m.groups()[0])
+    return 0
 
 
 def create_imposm3_mapping(tileset_filename):
@@ -31,7 +40,9 @@ def create_imposm3_mapping(tileset_filename):
 
     for layer in tileset.layers:
         for mapping in layer.imposm_mappings:
-            for table_name, definition in mapping.get('generalized_tables', {}).items():
+            layer_mapping = mapping.get('generalized_tables', {})
+            for table_name in sorted(layer_mapping.keys(), key=lambda x: get_zoom_level(x), reverse=True):
+                definition = layer_mapping[table_name]
                 if 'tolerance' in definition:
                     try:  # Test if numeric
                         float(definition['tolerance'])
@@ -67,6 +78,6 @@ def create_imposm3_mapping(tileset_filename):
 
     return {
         'tags': dict(include=list(sorted(set(include_tags)))),
-        'generalized_tables': generalized_tables,
         'tables': tables,
+        'generalized_tables': generalized_tables,
     }
