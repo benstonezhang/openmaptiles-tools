@@ -9,7 +9,6 @@ tags:
   - name:en
   - wikidata
   - wikipedia
-generalized_tables: {}
 tables:
   housenumber_point:
     type: geometry
@@ -58,4 +57,5 @@ tables:
       natural:
       - peak
       - volcano
+generalized_tables: {}
 
