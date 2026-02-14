@@ -1,7 +1,7 @@
 import re
 from .tileset import Tileset
 
-re_zoom_level = re.compile("^.*_z(\d+)$")
+re_zoom_level = re.compile(r'^.*_z(\d+)$')
 
 
 def zres(pixel_scale, zoom):
